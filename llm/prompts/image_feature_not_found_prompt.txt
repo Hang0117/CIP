@@ -5,10 +5,17 @@ Please analyze the issue. The following judge comment explains why the feature n
 
 
 ==================== FEATURE NOT FOUND — CORE RULES ====================
-EXPLICIT INSTRUCTION PRIORITY (READ FIRST, APPLY FIRST)
-- If the standard explicitly instructs: "If the [feature/ad/top banner] does not appear, select 'Feature not found'", you MUST treat the Judge's selection of "Feature not found" as Correct when the screenshots do not show the feature.
-- This explicit instruction overrides other rules. Do not mark Incorrect due to secondary mismatches when the absence condition is met.
-- Case-level handling: when explicit instruction applies and the feature is absent, set final_result = "Correct" with a reason referencing the explicit instruction.
+EXECUTION VALIDATION PRIORITY (READ FIRST, APPLY FIRST)
+- BEFORE applying any other rules, you MUST first validate that ALL steps were executed correctly.
+- If ANY step has an EXECUTION ERROR (wrong UI element clicked, wrong page opened, settings opened without applying, etc.), mark as "Incorrect" immediately.
+- This execution validation takes priority over explicit instructions and feature absence checks.
+- Execution errors include but are not limited to: clicking wrong UI elements, opening wrong pages/content, opening settings without applying them, skipping actions.
+
+EXPLICIT INSTRUCTION PRIORITY (SECOND PRIORITY - ONLY APPLIES IF EXECUTION IS CORRECT)
+- If the standard explicitly instructs: "If the [feature/ad/top banner] does not appear, select 'Feature not found'", you MUST treat the Judge's selection of "Feature not found" as Correct when the screenshots do not show the feature AND all execution steps are correct.
+- This explicit instruction applies only when execution steps are validated as correct. Do not apply if execution errors exist.
+- Case-level handling: when explicit instruction applies, feature is absent, AND execution is correct, set final_result = "Correct" with a reason referencing the explicit instruction.
+
 A Judge's decision of "Feature not found" must be evaluated based on the following rules:
 
 ------------------------------
@@ -39,11 +46,24 @@ The Judge’s selection of “Feature not found” is considered Correct when AN
 --------------------------------
 ✖ Incorrect (Case-Level Incorrect)
 --------------------------------
-The Judge’s selection is Incorrect when ALL of the following are true:
+The Judge's selection is Incorrect when ANY of the following are true:
 
-1. The standard test case does NOT instruct selecting “Feature not found”.
-2. The feature clearly DOES appear in the screenshots.
-3. The Judge still selected “Feature not found”.
+1. **Execution Error Rule (PRIORITY)** - Even if the feature does not appear, if the Judge executed the steps incorrectly (e.g., clicked wrong UI element, skipped actions, opened settings page without applying the setting, changed settings in content area instead of browser UI), the result is Incorrect. The absence of the feature may be a consequence of incorrect execution rather than actual feature unavailability.
+   - Example: Standard requires "Click the Search button in the sidebar", but Judge clicked the search box in the main page instead. Even if the sidebar search pane doesn't appear, this is Incorrect due to wrong action.
+   - Example: Standard requires "Open an article page to verify content", but Judge opened an advertisement page instead. Even if the expected content region doesn't appear, this is Incorrect due to wrong page opened.
+   - Example: Standard requires "Change browser appearance to Dark mode" and the settings page shows the Dark option, but NO visual evidence shows the browser appearance actually changed to dark (toolbar/UI still appears light) → this is Incorrect because opening the settings page showing a Dark option ≠ applying Dark mode to the browser. The step requires APPLYING the setting, which means the browser UI must visually reflect the change. If no screenshot after the settings page shows the browser UI in Dark mode, the setting was never applied.
+   - **CRITICAL DARK MODE VALIDATION**: When evaluating Dark mode application steps (Step N requires "Change appearance to Dark mode"), you MUST verify by examining ALL subsequent screenshots:
+     - Look for CLEAR visual evidence in the browser toolbar, tabs area, address bar, window chrome - these should appear in DARK COLORS (dark gray/black) if Dark mode was successfully applied
+     - If Step N shows edge://settings/appearance with Dark selected, but you do NOT see CLEAR evidence of dark-colored browser chrome/toolbar in any subsequent step → assume Dark mode was NOT successfully applied
+     - The burden of proof is on the screenshots to SHOW the Dark mode applied; if you cannot clearly see dark browser chrome in subsequent steps, it was NOT applied → Mark as Incorrect
+     - When you examine subsequent screenshots (Step N+1 onwards) and do NOT see clear dark-colored toolbar/chrome, this is evidence of execution error
+     - Do not accept the absence of explicit light colors as proof of dark colors; you must see actual dark colors to confirm application
+     - Reason: "Step N requires applying Dark mode. While settings page shows Dark option, subsequent steps do not show clear visual evidence of dark-colored browser chrome/toolbar. Without clear evidence of the setting being applied to the UI, this is an execution error."
+   - Assess all steps for correct execution first, including verifying that settings were APPLIED not just OPENED. If any step violates the standard requirements → mark as Incorrect.
+
+2. The standard test case does NOT instruct selecting "Feature not found".
+3. The feature clearly DOES appear in the screenshots.
+4. The Judge still selected "Feature not found".
 
 → This is a misjudgment and must be marked Incorrect.
 
@@ -59,39 +79,57 @@ Mark as Spam when:
 ------------------------------
 Choose NeedDiscussion if:
 - Screenshots are incomplete, corrupted, too ambiguous,
-- Or it is genuinely impossible to determine whether the feature appears.
-
+- Or it is genuinely impossible to determine whether the feature appears.- **STEP INSTRUCTION LOGIC ERROR**: If a standard test step contains self-contradictory or logically nonsensical instructions (e.g., "Please choose 'Feature not found' option, if the ad card in top banner placement" - which implies selecting FNF when the feature EXISTS, contradicting the normal FNF logic). When step instructions themselves are illogical or contradictory, mark as NeedDiscussion because the standard itself is unclear/broken.
 If the task type does not support “NeedDiscussion”:
 → Treat as Correct and explain why in the final reason.
 
 ==================== EDGE BROWSER SETTINGS OVERRIDE RULE ====================
-If the standard step describes Microsoft Edge browser settings, configuration, or setup operations,
-the step MUST be automatically judged as Correct without checking the actual image.
+**NOTE**: The automatic override for Edge browser settings has been DISABLED to ensure proper validation of setting application.
 
-Ignore the screenshot completely for such steps.
-
-Examples include:
-- Opening Edge settings/preferences
-- Configuring browser options
-- Managing privacy/security/extension settings
-- Startup/homepage configuration
-- Profile/account setup in Edge
-- Any other browser-configuration tasks
-
-For these steps:
-result = "Correct"
-reason = "This is an Edge browser setting step, automatically considered correct as instructed."
+For Edge browser settings/configuration steps:
+- Simply OPENING edge://settings or settings pages is NOT sufficient
+- Opening a settings page and selecting an option does NOT equal applying that setting to the browser
+- You MUST see clear visual evidence in SUBSEQUENT screenshots that the setting was actually applied to the browser UI/chrome
+- If the browser appearance/behavior in subsequent steps has not changed from the settings page alone, mark as Incorrect
+- Settings modification validation is handled in the normal Incorrect/Correct evaluation rules below
 
 ==================== NORMAL STEP JUDGMENT RULES (NON-FEATURE-NOT-FOUND STEPS) ====================
 (These apply only to step-level correctness, not the Judge’s final choice)
-
+**CRITICAL PROCEDURAL RULE: STEP-BY-STEP EXECUTION VALIDATION**
+Before determining whether the Judge's "Feature not found" decision is correct, you MUST first validate that each step was executed correctly according to the standard text. If any step execution is incorrect (wrong action, wrong element clicked, etc.), the absence of the feature may be due to incorrect execution rather than actual feature unavailability. In such cases, mark the overall result as "Incorrect" even if the feature truly does not appear.
+**CRITICAL: STEP INSTRUCTION LOGIC VALIDATION**
+Before evaluating any step execution, first check if the step instruction itself is logically sound:
+- Example of LOGIC ERROR: "Please choose 'Feature not found' option, if the ad card in top banner placement" - this instruction is contradictory because:
+  - It says to select 'Feature not found'
+  - But the condition "if the ad card in top banner placement [EXISTS]" means the feature IS present
+  - Selecting 'Feature not found' when the feature exists is logically wrong
+  - Normal FNF logic: select FNF only if feature does NOT appear; if it DOES appear, don't select FNF
+- **SPECIAL CASE**: If you detect any step with text pattern like "choose 'Feature not found' option, if the ad card in [placement]" - this is a known logic error in the step instruction itself. Mark as NeedDiscussion with reason: "Step instruction contains a logical contradiction: it instructs to select 'Feature not found' when the ad card DOES appear in the placement, which contradicts the standard FNF definition (FNF should only be selected when the feature does NOT appear)."
+- If a step contains such logical contradictions, the step instruction itself is flawed → mark final_result as NeedDiscussion, not Correct
 Correct:
 - The screenshot clearly shows the correct execution of the described step.
 
+**SETTINGS MODIFICATION VERIFICATION RULE**:
+For steps that require changing/modifying browser settings (e.g., "change appearance to Dark mode", "enable feature X"):
+- OPENING a settings page is NOT the same as MODIFYING the setting
+- You MUST verify that the actual setting was APPLIED/CHANGED in the browser, not just that the settings page was opened
+- For appearance changes (Dark mode): Check if the browser's TOOLBAR/CHROME area (the UI controls, tabs area, address bar area) shows the Dark appearance. If the toolbar/UI still appears light/white, the Dark mode was NOT applied.
+- If screenshot shows edge://settings/appearance page with Dark option visible/selected but the browser toolbar/UI area is still light/white, the setting was NOT modified → mark as Incorrect
+- If screenshot shows a settings page content but no clear evidence the actual browser setting was toggled/enabled/applied in the UI chrome → mark as Incorrect
+- Only mark as Correct if the screenshot clearly shows the setting was actually applied/changed in the browser UI chrome
+- Reason format for Incorrect: "Step requires modifying [setting name], but screenshot shows settings page with option visible without evidence the browser UI (toolbar/chrome) was changed to reflect this setting."
+
 Incorrect:
+- **SETTINGS APPLICATION FAILURE - CRITICAL FOR DARK MODE**: If a standard step requires "change/modify/apply/enable [setting name]" like "change appearance to Dark mode":
+  - Opening edge://settings/appearance with Dark option visible is ONLY the first part (opening settings), NOT the complete application
+  - The setting is only "applied" when the ACTUAL BROWSER UI (toolbar, tabs, address bar, chrome) visually changes to dark colors
+  - If subsequent steps show the browser chrome still in light/white appearance → the Dark mode was NOT applied → MARK AS INCORRECT
+  - Reason format: "Step requires applying Dark mode to browser appearance. While the settings page shows Dark option, subsequent steps show the browser toolbar/UI chrome remains in light/white appearance, proving Dark mode was not applied. This is an execution error."
+- **SETTINGS MODIFICATION ERROR**: If the step requires "change/modify/apply/enable [setting name]" (not just "open settings"), but the screenshot only shows the settings page opened without clear evidence that the actual setting was applied/toggled/changed in the browser UI → mark as Incorrect. Opening a settings page is NOT the same as applying the setting to the browser.
 - Action does not match the standard step.
 - Judge skipped an action.
 - An issue exists but Judge did not report it.
+- CRITICAL: If the standard requires clicking a SPECIFIC UI element in a SPECIFIC location (e.g., sidebar button) but the actual screenshot shows a DIFFERENT UI element was clicked instead (e.g., a search box on the main page), mark as Incorrect with reason: "ActionNotPerformed: Standard requires clicking [specific element], but screenshot shows [different element] was clicked instead. Feature absence is due to incorrect execution, not actual feature unavailability."
 
 Spam:
 - Unrelated or meaningless screenshot.
@@ -102,17 +140,30 @@ NeedDiscussion:
 ==================== FINAL SUMMARY RULES ====================
 After evaluating all steps and applying the Feature-Not-Found logic:
 
-If any step is Spam →
-    "final_result": "Spam"
+**CRITICAL PRIORITY ORDER**:
+0. First, check if ANY step instruction has a LOGIC ERROR (contradictory instructions)
+1. If any step has logic error, mark as NeedDiscussion
+2. Next, check if ANY step has an EXECUTION ERROR or SETTINGS MODIFICATION ERROR
+3. If any execution error exists, mark as Incorrect
+4. Only if all steps are executed correctly, then apply Explicit Instruction Priority
 
-Else if any step is NeedDiscussion →
+If any step instruction has LOGIC ERROR →
     "final_result": "NeedDiscussion"
 
-Else if any non-Edge-setting step is Incorrect →
+Else if any step has execution/settings modification error →
     "final_result": "Incorrect"
 
-Else →
+Else if any step is Spam →
+    "final_result": "Spam"
+
+Else if any step is NeedDiscussion (ambiguous/unclear) →
+    "final_result": "NeedDiscussion"
+
+Else if feature truly does not appear AND explicit instruction says to select "Feature not found" →
     "final_result": "Correct"
+
+Else →
+    "final_result": "Correct" (if feature doesn't appear) or "Incorrect" (if it does but Judge said not found)
 
 ==================== OUTPUT FORMAT (STRICT) ====================
 Respond ONLY with JSON in this exact format:
